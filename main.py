@@ -10,6 +10,33 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QToolTip, QPushButton,
 from PyQt5.QtGui import (QIcon, QFont, QColor, QPainter, QPen, QBrush,
                          QPolygonF)
 
+from utils import (convex_hull, L2Dist, deCasteljau, deCasteljauRat)
+
+
+def drawPlot(curve):
+    if curve['type'] == 'bezier':
+        points = [deCasteljau(curve['points'],
+                              0.001 * t) for t in range(1001)]
+        bezierPoly = QPolygonF()
+        for (x, y) in points:
+            bezierPoly.append(QPointF(x + 5, y + 5))
+        return bezierPoly
+    elif curve['type'] == 'rbezier':
+        points = [deCasteljauRat(curve['points'], curve['weights'],
+                                 0.001 * t) for t in range(1001)]
+        bezierPoly = QPolygonF()
+        for (x, y) in points:
+            bezierPoly.append(QPointF(x + 5, y + 5))
+        return bezierPoly
+    elif curve['type'] == 'interp':
+        pass
+    elif curve['type'] == 'nspline':
+        pass
+    elif curve['type'] == 'pspline':
+        pass
+    else:
+        raise "UNKNOWN CURVE"
+
 
 class Communications(QObject):
     updateStatusBar = pyqtSignal(str)
@@ -27,7 +54,9 @@ class DrawingBoard(QFrame, QObject):
     def __init__(self, parent):
         super().__init__(parent)
         self.setMouseTracking(True)
-        self.curves = {'default': {'points': [], 'type': 'bezier'}}
+        self.curves = {'default': {'points': [], 'type': 'bezier',
+                                   'plot': QPolygonF(),
+                                   'changed?': False}}
         self.activeCurve = 'default'
         self.pointDragged = None
         self.pointSelected = None
@@ -47,6 +76,7 @@ class DrawingBoard(QFrame, QObject):
         if self.pointDragged is None:
             self.curves[self.activeCurve]['points'].append((event.x(),
                                                             event.y()))
+            self.curves[self.activeCurve]['changed?'] = True
             self.selectedX = event.x()
             self.selectedY = event.y()
             self.pointSelected = len(self.curves[self.activeCurve]['points'])
@@ -67,6 +97,7 @@ class DrawingBoard(QFrame, QObject):
                 points = self.curves[self.activeCurve]['points']
                 points = points[:i] + [(x - 5, y - 5)] + points[i+1:]
                 self.curves[self.activeCurve]['points'] = points
+                self.curves[self.activeCurve]['changed?'] = True
                 self.emitSignals()
                 self.update()
 
@@ -144,6 +175,13 @@ class DrawingBoard(QFrame, QObject):
 
     def paintEvent(self, event):
         painter = QPainter(self)
+        points = self.curves[self.activeCurve]['points']
+
+        polyline = QPolygonF()
+        for (x, y) in points:
+            polyline.append(QPointF(x + 5, y + 5))
+        painter.setPen(QPen(QColor(0, 0, 128)))
+        painter.drawPolyline(polyline)
         conv = convex_hull(self.curves[self.activeCurve]['points'])
         polygon = QPolygonF()
         for (x, y) in conv:
@@ -155,18 +193,13 @@ class DrawingBoard(QFrame, QObject):
             painter.setPen(QPen(QColor(255, 0, 0)))
             x, y = self.curves[self.activeCurve]['points'][self.pointSelected]
             painter.drawRect(x, y, 10, 10)
-        if self.curves[self.activeCurve]['type'] == 'bezier' and \
+        if self.curves[self.activeCurve]['changed?'] and \
                 len(self.curves[self.activeCurve]['points']) > 1:
-            print("PRE BEZIER")
-            print(self.curves[self.activeCurve]['points'])
-            points = [deCasteljau(self.curves[self.activeCurve]['points'],
-                                  0.001 * t) for t in range(1001)]
-            bezierPoly = QPolygonF()
-            for (x, y) in points:
-                bezierPoly.append(QPointF(x + 5, y + 5))
-            painter.setPen(QPen(QColor(0, 0, 0)))
-            painter.drawPolyline(bezierPoly)
-            print(self.curves[self.activeCurve]['points'])
+            newPlot = drawPlot(self.curves[self.activeCurve])
+            self.curves[self.activeCurve]['plot'] = newPlot
+            self.curves[self.activeCurve]['changed?'] = False
+        painter.setPen(QPen(QColor(0, 0, 0)))
+        painter.drawPolyline(self.curves[self.activeCurve]['plot'])
         painter.setBrush(QBrush(QColor(0, 154, 0)))
         for (i, (x, y)) in enumerate(self.curves[self.activeCurve]['points']):
             painter.drawEllipse(x, y, 10, 10)
@@ -436,77 +469,6 @@ class MainWidget(QMainWindow):
                 self.nukesSent))
         else:
             self.statusBar().showMessage('Arm the nukes first!')
-
-
-def L2Dist(x1, y1, x2, y2):
-    return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
-
-
-def convex_hull(points):
-    """Computes the convex hull of a set of 2D points.
-
-    Input: an iterable sequence of (x, y) pairs representing the points.
-    Output: a list of vertices of the convex hull in counter-clockwise order,
-            starting from the vertex with the lexicographically
-            smallest coordinates.
-    Implements Andrew's monotone chain algorithm. O(n log n) complexity.
-    """
-
-    # Sort the points lexicographically (tuples
-    # are compared lexicographically).
-    # Remove duplicates to detect the case we
-    # have just one unique point.
-    points = sorted(set(points))
-
-    # Boring case: no points or a
-    # single point, possibly repeated
-    # multiple times.
-    if len(points) <= 1:
-        return points
-
-    def cross(o, a, b):
-        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-
-    lower = []
-    for p in points:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
-            lower.pop()
-        lower.append(p)
-
-    upper = []
-    for p in reversed(points):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
-            upper.pop()
-        upper.append(p)
-
-    # Last point of each list is omitted because it is repeated
-    # at the beginning of the other list
-    return lower[:-1] + upper[:-1]
-
-
-def deCasteljau(points, t):
-    return deCasteljauRat(points, [1.0] * len(points), t)
-
-
-def deCasteljauRat(points, weights, t):
-    cpPoints = [points[i] for i in range(len(points))]
-    t1 = 1.0 - t
-    for k in range(1, len(cpPoints) + 1):
-        for i in range(len(cpPoints) - k):
-            u = t1 * weights[i]
-            v = t * weights[i + 1]
-            weights[i] = u + v
-            u = u / weights[i]
-            v = 1 - u
-            cpPoints[i] = combine_pairs([u, v], [cpPoints[i], cpPoints[i + 1]])
-    return cpPoints[0]
-
-
-def combine_pairs(weights, points):
-    result = (0.0, 0.0)
-    for (i, (x, y)) in enumerate(points):
-        result = (result[0] + weights[i] * x, result[1] + weights[i] * y)
-    return result
 
 
 def main():
