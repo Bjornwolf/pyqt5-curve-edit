@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QToolTip, QPushButton,
                              QMessageBox, QDesktopWidget, QMainWindow,
                              QAction, qApp, QMenu, QFrame, QLabel, QLineEdit,
                              QHBoxLayout, QVBoxLayout, QSplitter,
-                             QSizePolicy)
+                             QSizePolicy, QCheckBox)
 from PyQt5.QtGui import (QIcon, QFont, QColor, QPainter, QPen, QBrush)
 
 from utils import L2Dist
@@ -23,13 +23,15 @@ class Communications(QObject):
     moveXPointTo = pyqtSignal(int)
     moveYPoint = pyqtSignal(int)
     moveYPointTo = pyqtSignal(int)
+    toggleHull = pyqtSignal(bool)
+    toggleGuide = pyqtSignal(bool)
 
 
 class DrawingBoard(QFrame, QObject):
     def __init__(self, parent):
         super().__init__(parent)
         self.setMouseTracking(True)
-        self.curves = {'default': Curve()}
+        self.curves = {'default': Curve(ctype='bezier')}
         self.activeCurve = 'default'
         self.pointDragged = None
         self.pointSelected = None
@@ -123,6 +125,14 @@ class DrawingBoard(QFrame, QObject):
         self.emitSignals()
         self.update()
 
+    def toggleHull(self, is_hull):
+        self.curves[self.activeCurve].toggle_hull(is_hull)
+        self.update()
+
+    def toggleGuide(self, is_guide):
+        self.curves[self.activeCurve].toggle_guide(is_guide)
+        self.update()
+
     def emitSignals(self):
         if self.pointSelected is not None:
             i = self.pointSelected
@@ -146,7 +156,6 @@ class DrawingBoard(QFrame, QObject):
         if self.curves[self.activeCurve].is_guide:
             painter.setPen(QPen(QColor(255, 0, 0)))
             painter.drawPolyline(self.curves[self.activeCurve].guide)
-
         #  potem aktywna
         painter.setPen(QPen(QColor(0, 0, 0)))
         painter.drawPolyline(self.curves[self.activeCurve].plot)
@@ -208,8 +217,14 @@ class FunctionBar(QFrame):
         phButton = QPushButton('Placeholder', self)
         phButton.setFont(QFont('Lato', 12))
         phButton.resize(phButton.sizeHint())
+        self.hullBox = QCheckBox('Show hull', self)
+        self.guideBox = QCheckBox('Show guide', self)
         lineLayout = QVBoxLayout()
         lineLayout.addWidget(phButton)
+        lineLayout.addWidget(self.hullBox)
+        lineLayout.addWidget(self.guideBox)
+        self.hullBox.stateChanged.connect(self.toggleHull)
+        self.guideBox.stateChanged.connect(self.toggleGuide)
         lineZone = QFrame()
         lineZone.setLayout(lineLayout)
 
@@ -314,6 +329,16 @@ class FunctionBar(QFrame):
         self.c.cyclePoint.emit(1)
         self.update()
 
+    def toggleHull(self, state):
+        is_hull = True if state == Qt.Checked else False
+        self.c.toggleHull.emit(is_hull)
+        self.update()
+
+    def toggleGuide(self, state):
+        is_guide = True if state == Qt.Checked else False
+        self.c.toggleGuide.emit(is_guide)
+        self.update()
+
 
 class MainWidget(QMainWindow):
     def __init__(self):
@@ -391,6 +416,8 @@ class MainWidget(QMainWindow):
         self.c.moveXPointTo.connect(self.board.moveXPointTo)
         self.c.moveYPoint.connect(self.board.moveYPoint)
         self.c.moveYPointTo.connect(self.board.moveYPointTo)
+        self.c.toggleHull.connect(self.board.toggleHull)
+        self.c.toggleGuide.connect(self.board.toggleGuide)
         self.board.connectEvents(self.c)
         self.functionBar.connectEvents(self.c)
         self.show()

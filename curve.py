@@ -17,6 +17,7 @@ class Curve:
 
     def add_point(self, x, y, z=0):
         self.points.append((x, y))
+        self.points_no += 1
         self.is_changed = True
 
     def move_point_to(self, i, x=None, y=None):
@@ -61,3 +62,11 @@ class Curve:
         self.guide = QPolygonF()
         for (x, y) in self.points:
             self.guide.append(QPointF(x + 5, y + 5))
+
+    def toggle_hull(self, is_hull):
+        self.is_hull = is_hull
+        self.is_changed = True
+
+    def toggle_guide(self, is_guide):
+        self.is_guide = is_guide
+        self.is_changed = True
