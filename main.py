@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QToolTip, QPushButton,
                              QMessageBox, QDesktopWidget, QMainWindow,
                              QAction, qApp, QMenu, QFrame, QLabel, QLineEdit,
                              QHBoxLayout, QVBoxLayout, QSplitter,
-                             QSizePolicy, QCheckBox)
+                             QSizePolicy, QCheckBox, QComboBox)
 from PyQt5.QtGui import (QIcon, QFont, QColor, QPainter, QPen, QBrush)
 
 from utils import L2Dist
@@ -25,14 +25,18 @@ class Communications(QObject):
     moveYPointTo = pyqtSignal(int)
     toggleHull = pyqtSignal(bool)
     toggleGuide = pyqtSignal(bool)
+    addCurve = pyqtSignal(str)
+    removeCurve = pyqtSignal(str)
+    selectCurve = pyqtSignal(str)
+    selectedCurveName = pyqtSignal(str)
 
 
 class DrawingBoard(QFrame, QObject):
     def __init__(self, parent):
         super().__init__(parent)
         self.setMouseTracking(True)
-        self.curves = {'default': Curve(ctype='bezier')}
-        self.activeCurve = 'default'
+        self.curves = {}
+        self.activeCurve = None
         self.pointDragged = None
         self.pointSelected = None
         self.selectedX = None
@@ -43,16 +47,17 @@ class DrawingBoard(QFrame, QObject):
         self.c = c
 
     def mousePressEvent(self, event):
-        for (i, (x, y)) in enumerate(self.curves[self.activeCurve].points):
-            if L2Dist(x + 5, y + 5, event.x(), event.y()) < 8:
-                self.pointDragged = i
+        if self.activeCurve is not None:
+            for (i, (x, y)) in enumerate(self.curves[self.activeCurve].points):
+                if L2Dist(x + 5, y + 5, event.x(), event.y()) < 8:
+                    self.pointDragged = i
+                    self.selectedX = event.x()
+                    self.selectedY = event.y()
+            if self.pointDragged is None:
+                self.curves[self.activeCurve].add_point(event.x(), event.y())
                 self.selectedX = event.x()
                 self.selectedY = event.y()
-        if self.pointDragged is None:
-            self.curves[self.activeCurve].add_point(event.x(), event.y())
-            self.selectedX = event.x()
-            self.selectedY = event.y()
-            self.pointSelected = self.curves[self.activeCurve].points_no - 1
+                self.pointSelected = self.curves[self.activeCurve].points_no - 1
         self.emitSignals()
         self.update()
 
@@ -79,11 +84,12 @@ class DrawingBoard(QFrame, QObject):
         if self.pointDragged is not None:
             self.pointSelected = self.pointDragged
         self.pointDragged = None
-        for (i, (x, y)) in enumerate(self.curves[self.activeCurve].points):
-            if L2Dist(x + 5, y + 5, event.x(), event.y()) < 8:
-                self.pointSelected = i
-                self.selectedX = event.x()
-                self.selectedY = event.y()
+        if self.activeCurve is not None:
+            for (i, (x, y)) in enumerate(self.curves[self.activeCurve].points):
+                if L2Dist(x + 5, y + 5, event.x(), event.y()) < 8:
+                    self.pointSelected = i
+                    self.selectedX = event.x()
+                    self.selectedY = event.y()
         self.emitSignals()
         self.update()
 
@@ -133,6 +139,39 @@ class DrawingBoard(QFrame, QObject):
         self.curves[self.activeCurve].toggle_guide(is_guide)
         self.update()
 
+    def addCurve(self, ctype):
+        cname = "Curve {}".format(len(self.curves) + 1)
+        self.curves[cname] = Curve(ctype=ctype)
+        self.c.addCurve.emit(cname)
+        self.selectCurve(cname)
+        self.c.selectedCurveName.emit(cname)
+        self.update()
+
+    def addBCurve(self):
+        self.addCurve('bezier')
+
+    def addRBCurve(self):
+        self.addCurve('rbezier')
+
+    def addICurve(self):
+        self.addCurve('interp')
+
+    def addNSCurve(self):
+        self.addCurve('nspline')
+
+    def addPSCurve(self):
+        self.addCurve('pspline')
+
+    def removeCurve(self, cname):
+        self.curves.pop(cname)
+        self.update()
+
+    def selectCurve(self, cname):
+        self.activeCurve = cname
+        self.pointSelected = None
+        print(cname)
+        self.update()
+
     def emitSignals(self):
         if self.pointSelected is not None:
             i = self.pointSelected
@@ -150,28 +189,30 @@ class DrawingBoard(QFrame, QObject):
                 painter.setPen(QPen(QColor(120, 120, 120)))
                 painter.drawPolyline(self.curves[curve_name].plot)
 
-        if self.curves[self.activeCurve].is_hull:
-            painter.setPen(QPen(QColor(0, 0, 255)))
-            painter.drawPolygon(self.curves[self.activeCurve].hull)
-        if self.curves[self.activeCurve].is_guide:
-            painter.setPen(QPen(QColor(255, 0, 0)))
-            painter.drawPolyline(self.curves[self.activeCurve].guide)
-        #  potem aktywna
-        painter.setPen(QPen(QColor(0, 0, 0)))
-        painter.drawPolyline(self.curves[self.activeCurve].plot)
+        if self.activeCurve is not None:
+            print(self.curves[self.activeCurve].points)
+            if self.curves[self.activeCurve].is_hull:
+                painter.setPen(QPen(QColor(0, 0, 255)))
+                painter.drawPolygon(self.curves[self.activeCurve].hull)
+            if self.curves[self.activeCurve].is_guide:
+                painter.setPen(QPen(QColor(255, 0, 0)))
+                painter.drawPolyline(self.curves[self.activeCurve].guide)
+            #  potem aktywna
+            painter.setPen(QPen(QColor(0, 0, 0)))
+            painter.drawPolyline(self.curves[self.activeCurve].plot)
 
-        #  potem zaznaczone punkty
-        if self.pointSelected is not None:
-            painter.setPen(QPen(QColor(255, 0, 0)))
-            x, y = self.curves[self.activeCurve].points[self.pointSelected]
-            painter.drawRect(x, y, 10, 10)
+            #  potem zaznaczone punkty
+            if self.pointSelected is not None:
+                painter.setPen(QPen(QColor(255, 0, 0)))
+                x, y = self.curves[self.activeCurve].points[self.pointSelected]
+                painter.drawRect(x, y, 10, 10)
 
-        #  i same punkty
-        painter.setPen(QPen(QColor(0, 0, 0)))
-        painter.setBrush(QBrush(QColor(0, 154, 0)))
-        for (i, (x, y)) in enumerate(self.curves[self.activeCurve].points):
-            painter.drawEllipse(x, y, 10, 10)
-            painter.drawText(x + 10, y + 20, str(i))
+            #  i same punkty
+            painter.setPen(QPen(QColor(0, 0, 0)))
+            painter.setBrush(QBrush(QColor(0, 154, 0)))
+            for (i, (x, y)) in enumerate(self.curves[self.activeCurve].points):
+                painter.drawEllipse(x, y, 10, 10)
+                painter.drawText(x + 10, y + 20, str(i))
 
 
 class ParamFrame(QFrame):
@@ -217,12 +258,15 @@ class FunctionBar(QFrame):
         phButton = QPushButton('Placeholder', self)
         phButton.setFont(QFont('Lato', 12))
         phButton.resize(phButton.sizeHint())
+        self.cbox = QComboBox(self)
         self.hullBox = QCheckBox('Show hull', self)
         self.guideBox = QCheckBox('Show guide', self)
         lineLayout = QVBoxLayout()
         lineLayout.addWidget(phButton)
+        lineLayout.addWidget(self.cbox)
         lineLayout.addWidget(self.hullBox)
         lineLayout.addWidget(self.guideBox)
+        self.cbox.activated[str].connect(self.selectCurve)
         self.hullBox.stateChanged.connect(self.toggleHull)
         self.guideBox.stateChanged.connect(self.toggleGuide)
         lineZone = QFrame()
@@ -339,6 +383,21 @@ class FunctionBar(QFrame):
         self.c.toggleGuide.emit(is_guide)
         self.update()
 
+    def selectCurve(self, cname):
+        self.c.selectCurve.emit(cname)
+        self.update()
+
+    def addCurve(self, cname):
+        self.cbox.addItem(cname)
+        self.update()
+
+    def removeCurve(self, cname):
+        self.cbox.removeItem(cname)
+
+    def selectedCurveName(self, cname):
+        self.cbox.setCurrentText(cname)
+        self.update()
+
 
 class MainWidget(QMainWindow):
     def __init__(self):
@@ -355,13 +414,16 @@ class MainWidget(QMainWindow):
         self.statusBar().showMessage('Editor set and ready!')
         self.resize(800, 600)
         self.center()
-        self.setWindowTitle('CurveMinator v0.0.1')
+        self.setWindowTitle('CurveMinator v0.0.5')
         self.setWindowIcon(QIcon('icon.jpg'))
+        self.board = DrawingBoard(self)
 
         # TOP MENU
         menubar = self.menuBar()
         newAction = QAction('New', self)
         newAction.setShortcut('Ctrl+N')
+        newAction.triggered.connect(self.flush)
+
         openAction = QAction('Open', self)
         openAction.setShortcut('Ctrl+O')
 
@@ -384,16 +446,25 @@ class MainWidget(QMainWindow):
 
         curveMenu = menubar.addMenu('New curve')
         interpAction = QAction('Interpolated curve', self)
-        splineAction = QAction('Spline', self)
+        nSplineAction = QAction('N-Spline', self)
+        pSplineAction = QAction('P-Spline', self)
         bezierAction = QAction('Bézier curve', self)
+        ratBezierAction = QAction('Rational Bézier curve', self)
         curveMenu.addAction(interpAction)
-        curveMenu.addAction(splineAction)
+        curveMenu.addAction(nSplineAction)
+        curveMenu.addAction(pSplineAction)
         curveMenu.addAction(bezierAction)
+        curveMenu.addAction(ratBezierAction)
+
+        bezierAction.triggered.connect(self.board.addBCurve)
+        ratBezierAction.triggered.connect(self.board.addRBCurve)
+        interpAction.triggered.connect(self.board.addICurve)
+        nSplineAction.triggered.connect(self.board.addNSCurve)
+        pSplineAction.triggered.connect(self.board.addPSCurve)
 
         # SET UP DRAWING SPACE AND TOOLBAR
         mainLayout = QHBoxLayout()
 
-        self.board = DrawingBoard(self)
         self.board.setStyleSheet("QWidget { background-color: %s }" %
                                  QColor(255, 255, 255).name())
         self.board.setSizePolicy(QSizePolicy.Expanding,
@@ -418,6 +489,10 @@ class MainWidget(QMainWindow):
         self.c.moveYPointTo.connect(self.board.moveYPointTo)
         self.c.toggleHull.connect(self.board.toggleHull)
         self.c.toggleGuide.connect(self.board.toggleGuide)
+        self.c.addCurve.connect(self.functionBar.addCurve)
+        self.c.removeCurve.connect(self.board.removeCurve)
+        self.c.selectCurve.connect(self.board.selectCurve)
+        self.c.selectedCurveName.connect(self.functionBar.selectedCurveName)
         self.board.connectEvents(self.c)
         self.functionBar.connectEvents(self.c)
         self.show()
@@ -441,20 +516,8 @@ class MainWidget(QMainWindow):
         else:
             event.ignore()
 
-    def nukesArming(self, event):
-        self.isNukesArmed = event
-        if event:
-            self.statusBar().showMessage('Nukes armed!')
-        else:
-            self.statusBar().showMessage('Nukes disarmed!')
-
-    def nukeEvent(self, event):
-        if self.isNukesArmed:
-            self.nukesSent += 1
-            self.statusBar().showMessage('Nukes sent: {0}'.format(
-                self.nukesSent))
-        else:
-            self.statusBar().showMessage('Arm the nukes first!')
+    def flush(self):
+        pass
 
 
 def main():

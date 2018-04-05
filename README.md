@@ -4,9 +4,7 @@ Simple curve editor written in Python.
 
 TODOS:
 * refactor current code (TODO)
-* add new curve
 * add weights to points
-* active curve combobox
 * curve (re)name QLineEdit
 * implement natural and periodic splines
 * scale the drawing board so that it contains the same image when resized
@@ -18,3 +16,4 @@ TODOS:
 * curve scaling
 * point addition after/before current point
 * point deletion
+* multiple point selection

@@ -4,9 +4,9 @@ from PyQt5.QtGui import QPolygonF
 
 
 class Curve:
-    def __init__(self, points=[], ctype='bezier'):
-        self.points = points
-        self.points_no = len(points)
+    def __init__(self, ctype):
+        self.points = []
+        self.points_no = 0
         self.ctype = ctype
         self.is_changed = True
         self.is_hull = False
