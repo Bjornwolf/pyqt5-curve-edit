@@ -16,3 +16,5 @@ TODOS:
 * curve transposition
 * curve rotation
 * curve scaling
+* point addition after/before current point
+* point deletion

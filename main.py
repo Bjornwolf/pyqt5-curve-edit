@@ -1,41 +1,16 @@
 # -*- coding: utf-8 -*-
 
 import sys
-from PyQt5.QtCore import pyqtSignal, QObject, Qt, QPointF
+from PyQt5.QtCore import pyqtSignal, QObject, Qt
 from PyQt5.QtWidgets import (QApplication, QWidget, QToolTip, QPushButton,
                              QMessageBox, QDesktopWidget, QMainWindow,
                              QAction, qApp, QMenu, QFrame, QLabel, QLineEdit,
                              QHBoxLayout, QVBoxLayout, QSplitter,
                              QSizePolicy)
-from PyQt5.QtGui import (QIcon, QFont, QColor, QPainter, QPen, QBrush,
-                         QPolygonF)
+from PyQt5.QtGui import (QIcon, QFont, QColor, QPainter, QPen, QBrush)
 
-from utils import (convex_hull, L2Dist, deCasteljau, deCasteljauRat)
-
-
-def drawPlot(curve):
-    if curve['type'] == 'bezier':
-        points = [deCasteljau(curve['points'],
-                              0.001 * t) for t in range(1001)]
-        bezierPoly = QPolygonF()
-        for (x, y) in points:
-            bezierPoly.append(QPointF(x + 5, y + 5))
-        return bezierPoly
-    elif curve['type'] == 'rbezier':
-        points = [deCasteljauRat(curve['points'], curve['weights'],
-                                 0.001 * t) for t in range(1001)]
-        bezierPoly = QPolygonF()
-        for (x, y) in points:
-            bezierPoly.append(QPointF(x + 5, y + 5))
-        return bezierPoly
-    elif curve['type'] == 'interp':
-        pass
-    elif curve['type'] == 'nspline':
-        pass
-    elif curve['type'] == 'pspline':
-        pass
-    else:
-        raise "UNKNOWN CURVE"
+from utils import L2Dist
+from curve import Curve
 
 
 class Communications(QObject):
@@ -54,9 +29,7 @@ class DrawingBoard(QFrame, QObject):
     def __init__(self, parent):
         super().__init__(parent)
         self.setMouseTracking(True)
-        self.curves = {'default': {'points': [], 'type': 'bezier',
-                                   'plot': QPolygonF(),
-                                   'changed?': False}}
+        self.curves = {'default': Curve()}
         self.activeCurve = 'default'
         self.pointDragged = None
         self.pointSelected = None
@@ -68,19 +41,16 @@ class DrawingBoard(QFrame, QObject):
         self.c = c
 
     def mousePressEvent(self, event):
-        for (i, (x, y)) in enumerate(self.curves[self.activeCurve]['points']):
+        for (i, (x, y)) in enumerate(self.curves[self.activeCurve].points):
             if L2Dist(x + 5, y + 5, event.x(), event.y()) < 8:
                 self.pointDragged = i
                 self.selectedX = event.x()
                 self.selectedY = event.y()
         if self.pointDragged is None:
-            self.curves[self.activeCurve]['points'].append((event.x(),
-                                                            event.y()))
-            self.curves[self.activeCurve]['changed?'] = True
+            self.curves[self.activeCurve].add_point(event.x(), event.y())
             self.selectedX = event.x()
             self.selectedY = event.y()
-            self.pointSelected = len(self.curves[self.activeCurve]['points'])
-            self.pointSelected -= 1
+            self.pointSelected = self.curves[self.activeCurve].points_no - 1
         self.emitSignals()
         self.update()
 
@@ -94,10 +64,7 @@ class DrawingBoard(QFrame, QObject):
             if distance > 5:
                 self.pointSelected = None
                 i = self.pointDragged
-                points = self.curves[self.activeCurve]['points']
-                points = points[:i] + [(x - 5, y - 5)] + points[i+1:]
-                self.curves[self.activeCurve]['points'] = points
-                self.curves[self.activeCurve]['changed?'] = True
+                self.curves[self.activeCurve].move_point_to(i, x - 5, y - 5)
                 self.emitSignals()
                 self.update()
 
@@ -110,7 +77,7 @@ class DrawingBoard(QFrame, QObject):
         if self.pointDragged is not None:
             self.pointSelected = self.pointDragged
         self.pointDragged = None
-        for (i, (x, y)) in enumerate(self.curves[self.activeCurve]['points']):
+        for (i, (x, y)) in enumerate(self.curves[self.activeCurve].points):
             if L2Dist(x + 5, y + 5, event.x(), event.y()) < 8:
                 self.pointSelected = i
                 self.selectedX = event.x()
@@ -119,89 +86,81 @@ class DrawingBoard(QFrame, QObject):
         self.update()
 
     def cyclePoint(self, order):
-        points = self.curves[self.activeCurve]['points']
-        if len(points) > 0:
-            self.pointSelected = (self.pointSelected + order) % len(points)
-            self.curves[self.activeCurve]['points'] = points
+        if self.curves[self.activeCurve].points_no > 0:
+            self.pointSelected = (self.pointSelected + order)
+            self.pointSelected %= self.curves[self.activeCurve].points_no
             self.emitSignals()
             self.update()
 
     def gotoPoint(self, pointId):
-        points = self.curves[self.activeCurve]['points']
-        if len(points) > 0 and pointId < len(points):
+        points_no = self.curves[self.activeCurve].points_no
+        if points_no > 0 and pointId < points_no:
             self.pointSelected = pointId
             self.emitSignals()
             self.update()
 
     def moveXPoint(self, newCoord):
-        points = self.curves[self.activeCurve]['points']
         i = self.pointSelected
-        points[i] = (points[i][0] + newCoord, points[i][1])
-        self.curves[self.activeCurve]['points'] = points
+        self.curves[self.activeCurve].move_point_by(i, newCoord, 0)
         self.emitSignals()
         self.update()
 
     def moveXPointTo(self, newCoord):
-        points = self.curves[self.activeCurve]['points']
         i = self.pointSelected
-        points = (newCoord, points[i][1])
-        self.curves[self.activeCurve]['points'] = points
+        self.curves[self.activeCurve].move_point_to(i, x=newCoord)
         self.emitSignals()
         self.update()
 
     def moveYPoint(self, newCoord):
-        points = self.curves[self.activeCurve]['points']
         i = self.pointSelected
-        points[i] = (points[i][0], points[i][1] + newCoord)
-        self.curves[self.activeCurve]['points'] = points
+        self.curves[self.activeCurve].move_point_by(i, 0, newCoord)
         self.emitSignals()
         self.update()
 
     def moveYPointTo(self, newCoord):
-        points = self.curves[self.activeCurve]['points']
         i = self.pointSelected
-        points[i] = (points[i][0], newCoord)
-        self.curves[self.activeCurve]['points'] = points
+        self.curves[self.activeCurve].move_point_to(i, y=newCoord)
         self.emitSignals()
         self.update()
 
     def emitSignals(self):
-        points = self.curves[self.activeCurve]['points']
         if self.pointSelected is not None:
             i = self.pointSelected
+            point = self.curves[self.activeCurve].points[i]
             self.c.updateSelectedPoint.emit(str(i),
-                                            str(points[i][0]),
-                                            str(points[i][1]))
+                                            str(point[0]),
+                                            str(point[1]))
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        points = self.curves[self.activeCurve]['points']
 
-        polyline = QPolygonF()
-        for (x, y) in points:
-            polyline.append(QPointF(x + 5, y + 5))
-        painter.setPen(QPen(QColor(0, 0, 128)))
-        painter.drawPolyline(polyline)
-        conv = convex_hull(self.curves[self.activeCurve]['points'])
-        polygon = QPolygonF()
-        for (x, y) in conv:
-            polygon.append(QPointF(x + 5, y + 5))
-        painter.setPen(QPen(QColor(0, 0, 255)))
-        painter.drawPolygon(polygon)
+        for curve_name in self.curves:
+            self.curves[curve_name].make_plot()
+            if self.activeCurve != curve_name:
+                painter.setPen(QPen(QColor(120, 120, 120)))
+                painter.drawPolyline(self.curves[curve_name].plot)
 
+        if self.curves[self.activeCurve].is_hull:
+            painter.setPen(QPen(QColor(0, 0, 255)))
+            painter.drawPolygon(self.curves[self.activeCurve].hull)
+        if self.curves[self.activeCurve].is_guide:
+            painter.setPen(QPen(QColor(255, 0, 0)))
+            painter.drawPolyline(self.curves[self.activeCurve].guide)
+
+        #  potem aktywna
+        painter.setPen(QPen(QColor(0, 0, 0)))
+        painter.drawPolyline(self.curves[self.activeCurve].plot)
+
+        #  potem zaznaczone punkty
         if self.pointSelected is not None:
             painter.setPen(QPen(QColor(255, 0, 0)))
-            x, y = self.curves[self.activeCurve]['points'][self.pointSelected]
+            x, y = self.curves[self.activeCurve].points[self.pointSelected]
             painter.drawRect(x, y, 10, 10)
-        if self.curves[self.activeCurve]['changed?'] and \
-                len(self.curves[self.activeCurve]['points']) > 1:
-            newPlot = drawPlot(self.curves[self.activeCurve])
-            self.curves[self.activeCurve]['plot'] = newPlot
-            self.curves[self.activeCurve]['changed?'] = False
+
+        #  i same punkty
         painter.setPen(QPen(QColor(0, 0, 0)))
-        painter.drawPolyline(self.curves[self.activeCurve]['plot'])
         painter.setBrush(QBrush(QColor(0, 154, 0)))
-        for (i, (x, y)) in enumerate(self.curves[self.activeCurve]['points']):
+        for (i, (x, y)) in enumerate(self.curves[self.activeCurve].points):
             painter.drawEllipse(x, y, 10, 10)
             painter.drawText(x + 10, y + 20, str(i))
 
