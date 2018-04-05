@@ -3,7 +3,6 @@ Simple curve editor written in Python.
 
 
 TODOS:
-* refactor current code (TODO)
 * add weights to points
 * curve (re)name QLineEdit
 * implement natural and periodic splines
