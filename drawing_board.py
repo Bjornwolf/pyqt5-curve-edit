@@ -20,6 +20,18 @@ class DrawingBoard(QFrame, QObject):
         self.selectedY = None
         self.c = None
 
+    def loadCurves(self, curves):
+        self.curves = curves
+        print(self.curves.keys())
+        self.curves = curves
+        self.activeCurve = list(self.curves.keys())[0]
+        self.c.selectedCurveName.emit(self.activeCurve)
+        self.pointDragged = None
+        self.pointSelected = None
+        self.selectedX = None
+        self.selectedY = None
+        self.update()
+
     def connectEvents(self, c):
         self.c = c
 
@@ -162,6 +174,7 @@ class DrawingBoard(QFrame, QObject):
 
         for curve_name in self.curves:
             self.curves[curve_name].make_plot()
+            print("zmejkplocony")
             if self.activeCurve != curve_name:
                 painter.setPen(QPen(QColor(120, 120, 120)))
                 painter.drawPolyline(self.curves[curve_name].plot)
@@ -176,6 +189,7 @@ class DrawingBoard(QFrame, QObject):
                 painter.drawPolyline(self.curves[self.activeCurve].guide)
             #  potem aktywna
             painter.setPen(QPen(QColor(0, 0, 0)))
+            print(self.curves[self.activeCurve].plot)
             painter.drawPolyline(self.curves[self.activeCurve].plot)
 
             #  potem zaznaczone punkty

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtWidgets import (QWidget, QToolTip, QMessageBox,
+from PyQt5.QtWidgets import (QWidget, QToolTip, QMessageBox, QInputDialog,
                              QDesktopWidget, QMainWindow, QAction, qApp, QMenu,
                              QHBoxLayout, QSizePolicy)
 from PyQt5.QtGui import (QIcon, QFont, QColor)
+import pickle
 
 from drawing_board import DrawingBoard
 from communications import Communications
@@ -37,6 +38,11 @@ class MainWidget(QMainWindow):
 
         openAction = QAction('Open', self)
         openAction.setShortcut('Ctrl+O')
+        openAction.triggered.connect(self.loadState)
+
+        saveAction = QAction('Save', self)
+        saveAction.setShortcut('Ctrl+S')
+        saveAction.triggered.connect(self.saveState)
 
         exportMenu = QMenu('Export image', self)
         pngAction = QAction('PNG', self)
@@ -52,6 +58,7 @@ class MainWidget(QMainWindow):
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction(newAction)
         fileMenu.addAction(openAction)
+        fileMenu.addAction(saveAction)
         fileMenu.addMenu(exportMenu)
         fileMenu.addAction(exitAction)
 
@@ -129,3 +136,24 @@ class MainWidget(QMainWindow):
 
     def flush(self):
         pass  # TODO
+
+    def saveState(self):
+        text, ok = QInputDialog.getText(self, 'Input Dialog',
+                                        'Enter filename:')
+        if ok:
+            fname = str(text)
+        f = open(fname, 'wb')
+        pickle.dump(self.board.curves, f)
+        f.close()
+
+    def loadState(self):
+        text, ok = QInputDialog.getText(self, 'Input Dialog',
+                                        'Enter filename:')
+        if ok:
+            fname = str(text)
+        f = open(fname, 'rb')
+        self.board.loadCurves(pickle.load(f))
+        print(self.board.curves)
+        print(self.board.curves['Curve 1'].plot)
+        print(self.board.curves['Curve 1'].points)
+        f.close()
