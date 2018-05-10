@@ -2,7 +2,6 @@
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QPushButton,
-                             QMessageBox,
                              QFrame, QLabel, QLineEdit,
                              QHBoxLayout, QVBoxLayout, QSplitter,
                              QCheckBox, QComboBox)
@@ -30,12 +29,15 @@ class FunctionBar(QFrame):
         phButton = QPushButton('Placeholder', self)
         phButton.setFont(QFont('Lato', 12))
         phButton.resize(phButton.sizeHint())
+        self.cname = QLineEdit(self)
+        self.cname.textChanged.connect(self.renameCurve)
         self.cbox = QComboBox(self)
         self.hullBox = QCheckBox('Show hull', self)
         self.guideBox = QCheckBox('Show guide', self)
         lineLayout = QVBoxLayout()
         lineLayout.addWidget(phButton)
         lineLayout.addWidget(self.cbox)
+        lineLayout.addWidget(self.cname)
         lineLayout.addWidget(self.hullBox)
         lineLayout.addWidget(self.guideBox)
         self.cbox.activated[str].connect(self.selectCurve)
@@ -71,6 +73,14 @@ class FunctionBar(QFrame):
         self.prevPoint.clicked.connect(self.cyclePrev)
         self.nextPoint.clicked.connect(self.cycleNext)
 
+        weightLayout = QVBoxLayout()
+        self.weightCheck = QCheckBox("Weights?")
+        self.weightField = QLineEdit("1.0")
+        weightLayout.addWidget(self.weightCheck)
+        weightLayout.addWidget(self.weightField)
+        weightFrame = QFrame()
+        weightFrame.setLayout(weightLayout)
+
         self.xFrame = ParamFrame(self, "X:")
         self.xFrame.textField.textEdited.connect(self.changeX)
         self.xFrame.plus1.clicked.connect(self.increaseX)
@@ -89,6 +99,7 @@ class FunctionBar(QFrame):
         pointLayout.addWidget(pointCyclerFrame)
         pointLayout.addWidget(self.xFrame)
         pointLayout.addWidget(self.yFrame)
+        pointLayout.addWidget(weightFrame)
         pointLayout.addWidget(self.deleteButton)
         pointZone = QFrame()
         pointZone.setLayout(pointLayout)
@@ -137,6 +148,12 @@ class FunctionBar(QFrame):
         self.c.gotoPoint.emit(0 if text == '' else int(text))
         self.update()
 
+    def renameCurve(self, text):
+        self.removeCurve(self.cbox.currentIndex())
+        self.addCurve(text)
+        self.c.renameCurve.emit(text)
+        self.update()
+
     def cyclePrev(self):
         self.c.cyclePoint.emit(-1)
         self.update()
@@ -165,6 +182,7 @@ class FunctionBar(QFrame):
 
     def removeCurve(self, cname):
         self.cbox.removeItem(cname)
+        self.update()
 
     def selectedCurveName(self, cname):
         self.cbox.setCurrentText(cname)

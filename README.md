@@ -3,16 +3,19 @@ Simple curve editor written in Python.
 
 
 TODOS:
-* add weights to points
-* curve (re)name QLineEdit
-* implement natural and periodic splines
-* scale the drawing board so that it contains the same image when resized
-* fix crashing plots when loading a file
-* export the program state as image
+* weight checkability (bezier)
+* weight change (bezier)
 * selecting curves via clicking
-* curve transposition
-* curve rotation
-* curve scaling
 * point addition after/before current point
 * point deletion
+* implement natural and periodic splines
+* implement bezier splines
+* joining curves
+
+OPTIONAL:
+* export the program state as image
 * multiple point selection
+
+KNOWN BUGS:
+* fix rename ComboBox bug
+* fix crashing plots when loading a file

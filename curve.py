@@ -4,7 +4,8 @@ from PyQt5.QtGui import QPolygonF
 
 
 class Curve:
-    def __init__(self, ctype):
+    def __init__(self, ctype, name=''):
+        self.name = name
         self.points = []
         self.points_no = 0
         self.ctype = ctype
@@ -31,12 +32,12 @@ class Curve:
         self.points[i] = (x + dx, y + dy)
         self.is_changed = True
 
-    def make_plot(self):
+    def make_plot(self, scx, scy):
         if self.is_changed:
             if self.is_hull:
-                self.make_hull()
+                self.make_hull(scx, scy)
             if self.is_guide:
-                self.make_guide()
+                self.make_guide(scx, scy)
             plot_size = 100. + 10. * self.points_no
             if self.ctype == 'bezier' and self.points_no > 0:
                 points = [deCasteljau(self.points, t / plot_size)
@@ -49,19 +50,19 @@ class Curve:
                 points = []
             self.plot = QPolygonF()
             for (x, y) in points:
-                self.plot.append(QPointF(x + 5, y + 5))
+                self.plot.append(QPointF(scx * x + 5, scy * y + 5))
         self.is_changed = False
 
-    def make_hull(self):
+    def make_hull(self, scx, scy):
         conv = convex_hull(self.points)
         self.hull = QPolygonF()
         for (x, y) in conv:
-            self.hull.append(QPointF(x + 5, y + 5))
+            self.hull.append(QPointF(scx * x + 5, scy * y + 5))
 
-    def make_guide(self):
+    def make_guide(self, scx, scy):
         self.guide = QPolygonF()
         for (x, y) in self.points:
-            self.guide.append(QPointF(x + 5, y + 5))
+            self.guide.append(QPointF(scx * x + 5, scy * y + 5))
 
     def toggle_hull(self, is_hull):
         self.is_hull = is_hull
@@ -70,3 +71,6 @@ class Curve:
     def toggle_guide(self, is_guide):
         self.is_guide = is_guide
         self.is_changed = True
+
+    def rename(self, new_name):
+        self.name = new_name

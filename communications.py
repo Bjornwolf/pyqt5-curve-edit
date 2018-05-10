@@ -19,3 +19,4 @@ class Communications(QObject):
     removeCurve = pyqtSignal(str)
     selectCurve = pyqtSignal(str)
     selectedCurveName = pyqtSignal(str)
+    renameCurve = pyqtSignal(str)
